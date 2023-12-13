@@ -1,5 +1,3 @@
-// ignore_for_file: library_private_types_in_public_api
-
 import 'package:flutter/material.dart';
 import 'package:dog_breeds/services/dog_api_service.dart';
 import 'package:dog_breeds/models/dog_model.dart';
@@ -47,7 +45,7 @@ class _DogScreenState extends State<DogScreen> {
 
           DogBreeds dogBreeds = dogBreedsSnapshot.data!;
 
-          return DogList(dogBreeds);
+          return DogList(dogBreeds, dogApiService);
         },
       ),
     );
@@ -56,8 +54,10 @@ class _DogScreenState extends State<DogScreen> {
 
 class DogList extends StatelessWidget {
   final DogBreeds dogBreeds;
+  final DogApiService dogApiService; // Add this line
 
-  const DogList(this.dogBreeds, {super.key});
+  const DogList(this.dogBreeds, this.dogApiService, {Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -67,66 +67,120 @@ class DogList extends StatelessWidget {
         String breed = dogBreeds.message.keys.elementAt(index);
         List<String> subBreeds = dogBreeds.message[breed]!;
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16.0,
-            vertical: 6.0,
-          ),
-          child: GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              if (subBreeds.isNotEmpty) {
-                // If sub-breeds, navigate to new screen with list of breeds
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SubBreedsScreen(
-                      breed: breed,
-                      subBreeds: subBreeds,
+        // Fetch images
+        Future<List<String>> fetchImages() async {
+          try {
+            return await dogApiService.fetchRandomImagesByBreed(breed);
+          } catch (error) {
+            print('Error fetching images for breed $breed: $error');
+            return [];
+          }
+        }
+
+        return FutureBuilder<List<String>>(
+          future: fetchImages(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            } else if (snapshot.hasError) {
+              return Center(
+                child: Text('Error: ${snapshot.error}'),
+              );
+            } else {
+              List<String> breedImages = snapshot.data ?? [];
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 6.0,
+                ),
+                child: GestureDetector(
+                  onTap: () async {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    if (subBreeds.isNotEmpty) {
+                      // If sub-breeds, navigate to new screen with list of breeds
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SubBreedsScreen(
+                            breed: breed,
+                            subBreeds: subBreeds,
+                          ),
+                        ),
+                      );
+                    } else {
+                      // If no sub-breeds, show a static text in SnackBar
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('No sub-breeds for $breed'),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300]!,
+                      borderRadius:
+                          const BorderRadius.all(Radius.circular(8.0)),
                     ),
-                  ),
-                );
-              } else {
-                // If no sub-breeds, show a static text in SnackBar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('No sub-breeds for $breed'),
-                  ),
-                );
-              }
-            },
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.grey[300]!,
-                borderRadius: const BorderRadius.all(Radius.circular(8.0)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(
-                    left: 16, top: 12, bottom: 12, right: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      '${breed[0].toUpperCase()}${breed.substring(1)}',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 17,
-                        fontWeight: FontWeight.normal,
-                        fontFamily: 'Roboto',
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        top: 12,
+                        bottom: 12,
+                        right: 8,
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (breedImages.isNotEmpty)
+                                Expanded(
+                                  child: Image.network(
+                                    breedImages.first,
+                                    height: 200,
+                                    width: 200,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (BuildContext context,
+                                        Object error, StackTrace? stackTrace) {
+                                      return Image.asset(
+                                          'assets/placeholder.png',
+                                          fit: BoxFit.cover,
+                                          height: 200,
+                                          width: 200);
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${breed[0].toUpperCase()}${breed.substring(1)}',
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.normal,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.black,
-                      size: 20, // Set your desired icon size
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
+              );
+            }
+          },
         );
       },
     );
